@@ -1,4 +1,4 @@
-package com.dmm.task;
+package com.dmm.task.data.entity;
 
 import java.time.LocalDateTime;
 
@@ -21,8 +21,7 @@ public class Task {
     private LocalDateTime date;
     private Boolean done;
 
-    // ゲッターとセッター
-
+    // Getters and Setters
     public Integer getId() {
         return id;
     }

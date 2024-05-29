@@ -1,10 +1,11 @@
-package com.dmm.task;
+package com.dmm.task.controller;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.temporal.IsoFields;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -18,16 +19,14 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 
+import com.dmm.task.data.entity.Task;
+import com.dmm.task.service.TaskService;
+
 @Controller
 public class TaskController {
 
     @Autowired
     private TaskService taskService;
-
-    @GetMapping("/login")
-    public String login() {
-        return "login";
-    }
 
     @GetMapping("/main")
     public String calendar(@RequestParam(required = false) String date, Model model, @AuthenticationPrincipal UserDetails userDetails) {
@@ -44,7 +43,6 @@ public class TaskController {
 
         return "calendar";
     }
-
 
     @GetMapping("/main/create")
     public String createTaskForm(Model model) {
@@ -86,11 +84,9 @@ public class TaskController {
 
     private List<List<LocalDate>> createCalendarMatrix(LocalDate startOfMonth) {
         LocalDate start = startOfMonth.minusDays(startOfMonth.getDayOfWeek().getValue() % 7);
-        return Stream.iterate(start, date -> date.plusDays(1))
+        Map<Integer, List<LocalDate>> groupedByWeek = Stream.iterate(start, date -> date.plusDays(1))
                 .limit(42)
-                .collect(Collectors.groupingBy(date -> date.get(IsoFields.WEEK_OF_WEEK_BASED_YEAR)))
-                .values()
-                .stream()
-                .collect(Collectors.toList());
+                .collect(Collectors.groupingBy(date -> date.get(IsoFields.WEEK_OF_WEEK_BASED_YEAR)));
+        return groupedByWeek.values().stream().collect(Collectors.toList());
     }
 }
