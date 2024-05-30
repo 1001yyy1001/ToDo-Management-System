@@ -11,11 +11,20 @@ import com.dmm.task.data.repository.TaskRepository;
 
 @Service
 public class TaskService {
+
     @Autowired
     private TaskRepository taskRepository;
 
-    public List<Task> findTasksByDateBetween(LocalDateTime from, LocalDateTime to, String name) {
-        return taskRepository.findByDateBetween(from, to, name);
+    public List<Task> findTasksByDateBetween(LocalDateTime startDate, LocalDateTime endDate) {
+        return taskRepository.findByDateBetween(startDate, endDate);
+    }
+
+    public List<Task> findTasksByDateBetween(LocalDateTime startDate, LocalDateTime endDate, String username) {
+        return taskRepository.findByDateBetweenAndName(startDate, endDate, username);
+    }
+
+    public Task getTaskById(int id) {
+        return taskRepository.findById(id).orElse(null);
     }
 
     public void saveTask(Task task) {
@@ -24,9 +33,5 @@ public class TaskService {
 
     public void deleteTask(int id) {
         taskRepository.deleteById(id);
-    }
-
-    public Task getTaskById(int id) {
-        return taskRepository.findById(id).orElse(null);
     }
 }

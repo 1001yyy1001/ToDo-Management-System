@@ -3,11 +3,11 @@ package com.dmm.task.controller;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
-import java.time.temporal.IsoFields;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -28,65 +28,124 @@ public class TaskController {
     @Autowired
     private TaskService taskService;
 
+    private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+
     @GetMapping("/home")
     public String calendar(@RequestParam(required = false) String date, Model model, @AuthenticationPrincipal UserDetails userDetails) {
         LocalDate targetDate = (date != null) ? LocalDate.parse(date) : LocalDate.now();
         LocalDateTime startOfMonth = targetDate.withDayOfMonth(1).atStartOfDay();
         LocalDateTime endOfMonth = targetDate.withDayOfMonth(targetDate.lengthOfMonth()).atTime(LocalTime.MAX);
-        List<Task> tasks = taskService.findTasksByDateBetween(startOfMonth, endOfMonth, userDetails.getUsername());
+        List<Task> tasks;
 
-        model.addAttribute("tasks", tasks);
+        if (userDetails.getAuthorities().stream().anyMatch(a -> a.getAuthority().equals("ADMIN"))) {
+            tasks = taskService.findTasksByDateBetween(startOfMonth, endOfMonth);
+        } else {
+            tasks = taskService.findTasksByDateBetween(startOfMonth, endOfMonth, userDetails.getUsername());
+        }
+
+        // 日付でタスクをマッピングする
+        Map<LocalDate, List<Task>> tasksByDate = tasks.stream()
+            .collect(Collectors.groupingBy(task -> task.getDate().toLocalDate()));
+
+        model.addAttribute("tasks", tasksByDate);
         model.addAttribute("month", targetDate.getMonthValue() + "月");
-        model.addAttribute("prev", targetDate.minusMonths(1));
-        model.addAttribute("next", targetDate.plusMonths(1));
+        model.addAttribute("prev", targetDate.minusMonths(1).withDayOfMonth(1));
+        model.addAttribute("next", targetDate.plusMonths(1).withDayOfMonth(1));
         model.addAttribute("matrix", createCalendarMatrix(startOfMonth.toLocalDate()));
 
-        return "main";  // ここで表示したいテンプレート名を指定
+        return "main";
     }
 
-    @GetMapping("/home/create")
+    @GetMapping("/main/create")
     public String createTaskForm(Model model) {
         model.addAttribute("task", new Task());
+        model.addAttribute("date", LocalDate.now());
         return "create";
     }
 
-    @PostMapping("/home/create")
-    public String createTask(Task task, @AuthenticationPrincipal UserDetails userDetails) {
+    @GetMapping("/main/create/{date}")
+    public String createTaskFormWithDate(@PathVariable String date, Model model) {
+        Task task = new Task();
+        task.setDate(LocalDate.parse(date).atStartOfDay());
+        model.addAttribute("task", task);
+        model.addAttribute("date", LocalDate.parse(date));
+        return "create";
+    }
+
+    @PostMapping("/main/create")
+    public String createTask(@RequestParam("title") String title,
+                             @RequestParam("date") String date,
+                             @RequestParam("text") String text,
+                             @AuthenticationPrincipal UserDetails userDetails) {
+        Task task = new Task();
+        task.setTitle(title);
+        task.setDate(LocalDate.parse(date, DATE_FORMATTER).atStartOfDay());
+        task.setText(text);
         task.setName(userDetails.getUsername());
         task.setDone(false);
         taskService.saveTask(task);
         return "redirect:/home";
     }
 
-    @GetMapping("/home/edit/{id}")
-    public String editTaskForm(@PathVariable int id, Model model) {
+    @GetMapping("/main/edit/{id}")
+    public String editTaskForm(@PathVariable int id, Model model, @AuthenticationPrincipal UserDetails userDetails) {
         Task task = taskService.getTaskById(id);
+        
+        if (userDetails.getAuthorities().stream().noneMatch(a -> a.getAuthority().equals("ADMIN"))
+            && !task.getName().equals(userDetails.getUsername())) {
+            return "redirect:/accessDeniedPage"; // 認可されていない場合の処理
+        }
+
         model.addAttribute("task", task);
         return "edit";
     }
 
-    @PostMapping("/home/edit/{id}")
-    public String editTask(@PathVariable int id, Task task) {
+    @PostMapping("/main/edit/{id}")
+    public String editTask(@PathVariable int id,
+                           @RequestParam("title") String title,
+                           @RequestParam("date") String date,
+                           @RequestParam("text") String text,
+                           @RequestParam(name = "done", required = false) boolean done) {
         Task existingTask = taskService.getTaskById(id);
-        existingTask.setTitle(task.getTitle());
-        existingTask.setDate(task.getDate());
-        existingTask.setText(task.getText());
-        existingTask.setDone(task.getDone());
+        existingTask.setTitle(title);
+        existingTask.setDate(LocalDate.parse(date, DATE_FORMATTER).atStartOfDay());
+        existingTask.setText(text);
+        existingTask.setDone(done);
         taskService.saveTask(existingTask);
         return "redirect:/home";
     }
 
-    @PostMapping("/home/delete/{id}")
-    public String deleteTask(@PathVariable int id) {
+    @PostMapping("/main/delete/{id}")
+    public String deleteTask(@PathVariable int id, @AuthenticationPrincipal UserDetails userDetails) {
+        Task task = taskService.getTaskById(id);
+        
+        if (userDetails.getAuthorities().stream().noneMatch(a -> a.getAuthority().equals("ADMIN"))
+            && !task.getName().equals(userDetails.getUsername())) {
+            return "redirect:/accessDeniedPage"; // 認可されていない場合の処理
+        }
+
         taskService.deleteTask(id);
         return "redirect:/home";
     }
 
     private List<List<LocalDate>> createCalendarMatrix(LocalDate startOfMonth) {
-        LocalDate start = startOfMonth.minusDays(startOfMonth.getDayOfWeek().getValue() % 7);
-        Map<Integer, List<LocalDate>> groupedByWeek = Stream.iterate(start, date -> date.plusDays(1))
-                .limit(42)
-                .collect(Collectors.groupingBy(date -> date.get(IsoFields.WEEK_OF_WEEK_BASED_YEAR)));
-        return groupedByWeek.values().stream().collect(Collectors.toList());
+        List<List<LocalDate>> calendarMatrix = new ArrayList<>();
+        List<LocalDate> week = new ArrayList<>();
+
+        LocalDate date = startOfMonth;
+        int daysToSubtract = date.getDayOfWeek().getValue() % 7;
+        LocalDate start = date.minusDays(daysToSubtract);
+
+        for (int i = 0; i < 42; i++) {
+            week.add(start);
+            start = start.plusDays(1);
+
+            if (week.size() == 7) {
+                calendarMatrix.add(new ArrayList<>(week));
+                week.clear();
+            }
+        }
+
+        return calendarMatrix;
     }
 }
