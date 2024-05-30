@@ -57,6 +57,11 @@ public class TaskController {
         return "main";
     }
 
+    @GetMapping("/main")
+    public String redirectToHome(@RequestParam(required = false) String date) {
+        return "redirect:/home" + (date != null ? "?date=" + date : "");
+    }
+
     @GetMapping("/main/create")
     public String createTaskForm(Model model) {
         model.addAttribute("task", new Task());
