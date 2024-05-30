@@ -34,4 +34,9 @@ public class TaskService {
     public void deleteTask(int id) {
         taskRepository.deleteById(id);
     }
+
+    public boolean isTaskOwner(int taskId, String username) {
+        Task task = taskRepository.findById(taskId).orElse(null);
+        return task != null && task.getName().equals(username);
+    }
 }

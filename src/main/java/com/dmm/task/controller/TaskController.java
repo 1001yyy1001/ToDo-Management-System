@@ -29,6 +29,7 @@ public class TaskController {
     private TaskService taskService;
 
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+    private static final DateTimeFormatter YEAR_MONTH_FORMATTER = DateTimeFormatter.ofPattern("yyyy年M月");
 
     @GetMapping("/home")
     public String calendar(@RequestParam(required = false) String date, Model model, @AuthenticationPrincipal UserDetails userDetails) {
@@ -48,9 +49,9 @@ public class TaskController {
             .collect(Collectors.groupingBy(task -> task.getDate().toLocalDate()));
 
         model.addAttribute("tasks", tasksByDate);
-        model.addAttribute("month", targetDate.getMonthValue() + "月");
-        model.addAttribute("prev", targetDate.minusMonths(1).withDayOfMonth(1));
-        model.addAttribute("next", targetDate.plusMonths(1).withDayOfMonth(1));
+        model.addAttribute("month", targetDate.format(YEAR_MONTH_FORMATTER));
+        model.addAttribute("prev", targetDate.minusMonths(1));
+        model.addAttribute("next", targetDate.plusMonths(1));
         model.addAttribute("matrix", createCalendarMatrix(startOfMonth.toLocalDate()));
 
         return "main";
@@ -88,14 +89,8 @@ public class TaskController {
     }
 
     @GetMapping("/main/edit/{id}")
-    public String editTaskForm(@PathVariable int id, Model model, @AuthenticationPrincipal UserDetails userDetails) {
+    public String editTaskForm(@PathVariable int id, Model model) {
         Task task = taskService.getTaskById(id);
-        
-        if (userDetails.getAuthorities().stream().noneMatch(a -> a.getAuthority().equals("ADMIN"))
-            && !task.getName().equals(userDetails.getUsername())) {
-            return "redirect:/accessDeniedPage"; // 認可されていない場合の処理
-        }
-
         model.addAttribute("task", task);
         return "edit";
     }
@@ -116,14 +111,7 @@ public class TaskController {
     }
 
     @PostMapping("/main/delete/{id}")
-    public String deleteTask(@PathVariable int id, @AuthenticationPrincipal UserDetails userDetails) {
-        Task task = taskService.getTaskById(id);
-        
-        if (userDetails.getAuthorities().stream().noneMatch(a -> a.getAuthority().equals("ADMIN"))
-            && !task.getName().equals(userDetails.getUsername())) {
-            return "redirect:/accessDeniedPage"; // 認可されていない場合の処理
-        }
-
+    public String deleteTask(@PathVariable int id) {
         taskService.deleteTask(id);
         return "redirect:/home";
     }
