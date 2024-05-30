@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Controller;
@@ -38,7 +39,7 @@ public class TaskController {
         LocalDateTime endOfMonth = targetDate.withDayOfMonth(targetDate.lengthOfMonth()).atTime(LocalTime.MAX);
         List<Task> tasks;
 
-        if (userDetails.getAuthorities().stream().anyMatch(a -> a.getAuthority().equals("ADMIN"))) {
+        if (userDetails.getAuthorities().stream().anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"))) {
             tasks = taskService.findTasksByDateBetween(startOfMonth, endOfMonth);
         } else {
             tasks = taskService.findTasksByDateBetween(startOfMonth, endOfMonth, userDetails.getUsername());
@@ -63,6 +64,7 @@ public class TaskController {
     }
 
     @GetMapping("/main/create")
+    @PreAuthorize("hasRole('USER') or hasRole('ADMIN')")
     public String createTaskForm(Model model) {
         model.addAttribute("task", new Task());
         model.addAttribute("date", LocalDate.now());
@@ -70,6 +72,7 @@ public class TaskController {
     }
 
     @GetMapping("/main/create/{date}")
+    @PreAuthorize("hasRole('USER') or hasRole('ADMIN')")
     public String createTaskFormWithDate(@PathVariable String date, Model model) {
         Task task = new Task();
         task.setDate(LocalDate.parse(date).atStartOfDay());
@@ -79,6 +82,7 @@ public class TaskController {
     }
 
     @PostMapping("/main/create")
+    @PreAuthorize("hasRole('USER') or hasRole('ADMIN')")
     public String createTask(@RequestParam("title") String title,
                              @RequestParam("date") String date,
                              @RequestParam("text") String text,
@@ -94,18 +98,21 @@ public class TaskController {
     }
 
     @GetMapping("/main/edit/{id}")
-    public String editTaskForm(@PathVariable int id, Model model) {
+    @PreAuthorize("hasRole('ADMIN') or @taskService.getTaskById(#id)?.name == authentication.name")
+    public String editTaskForm(@PathVariable int id, Model model, @AuthenticationPrincipal UserDetails userDetails) {
         Task task = taskService.getTaskById(id);
         model.addAttribute("task", task);
         return "edit";
     }
 
     @PostMapping("/main/edit/{id}")
+    @PreAuthorize("hasRole('ADMIN') or @taskService.getTaskById(#id)?.name == authentication.name")
     public String editTask(@PathVariable int id,
                            @RequestParam("title") String title,
                            @RequestParam("date") String date,
                            @RequestParam("text") String text,
-                           @RequestParam(name = "done", required = false) boolean done) {
+                           @RequestParam(name = "done", required = false) boolean done,
+                           @AuthenticationPrincipal UserDetails userDetails) {
         Task existingTask = taskService.getTaskById(id);
         existingTask.setTitle(title);
         existingTask.setDate(LocalDate.parse(date, DATE_FORMATTER).atStartOfDay());
@@ -116,7 +123,8 @@ public class TaskController {
     }
 
     @PostMapping("/main/delete/{id}")
-    public String deleteTask(@PathVariable int id) {
+    @PreAuthorize("hasRole('ADMIN') or @taskService.getTaskById(#id)?.name == authentication.name")
+    public String deleteTask(@PathVariable int id, @AuthenticationPrincipal UserDetails userDetails) {
         taskService.deleteTask(id);
         return "redirect:/home";
     }
