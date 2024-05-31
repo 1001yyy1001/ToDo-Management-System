@@ -137,7 +137,12 @@ public class TaskController {
         int daysToSubtract = date.getDayOfWeek().getValue() % 7;
         LocalDate start = date.minusDays(daysToSubtract);
 
-        for (int i = 0; i < 42; i++) {
+        // Calculate the number of weeks in the month
+        int daysInMonth = startOfMonth.lengthOfMonth();
+        int totalDays = daysToSubtract + daysInMonth;
+        int numWeeks = (int) Math.ceil(totalDays / 7.0);
+
+        for (int i = 0; i < numWeeks * 7; i++) {
             week.add(start);
             start = start.plusDays(1);
 
