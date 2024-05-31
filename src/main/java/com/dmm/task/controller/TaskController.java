@@ -37,12 +37,17 @@ public class TaskController {
         LocalDate targetDate = (date != null) ? LocalDate.parse(date) : LocalDate.now();
         LocalDateTime startOfMonth = targetDate.withDayOfMonth(1).atStartOfDay();
         LocalDateTime endOfMonth = targetDate.withDayOfMonth(targetDate.lengthOfMonth()).atTime(LocalTime.MAX);
+
+        // 前後の月の日付も含めた範囲を設定
+        LocalDateTime startOfCalendar = startOfMonth.minusDays(startOfMonth.getDayOfWeek().getValue() % 7);
+        LocalDateTime endOfCalendar = endOfMonth.plusDays(6 - endOfMonth.getDayOfWeek().getValue());
+
         List<Task> tasks;
 
         if (userDetails.getAuthorities().stream().anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"))) {
-            tasks = taskService.findTasksByDateBetween(startOfMonth, endOfMonth);
+            tasks = taskService.findTasksByDateBetween(startOfCalendar, endOfCalendar);
         } else {
-            tasks = taskService.findTasksByDateBetween(startOfMonth, endOfMonth, userDetails.getUsername());
+            tasks = taskService.findTasksByDateBetween(startOfCalendar, endOfCalendar, userDetails.getUsername());
         }
 
         // 日付でタスクをマッピングする
