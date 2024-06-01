@@ -1,7 +1,6 @@
 package com.dmm.task.controller;
 
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -35,33 +34,54 @@ public class TaskController {
     @GetMapping("/home")
     public String calendar(@RequestParam(required = false) String date, Model model, @AuthenticationPrincipal UserDetails userDetails) {
         LocalDate targetDate = (date != null) ? LocalDate.parse(date) : LocalDate.now();
-        LocalDateTime startOfMonth = targetDate.withDayOfMonth(1).atStartOfDay();
-        LocalDateTime endOfMonth = targetDate.withDayOfMonth(targetDate.lengthOfMonth()).atTime(LocalTime.MAX);
-
-        // 前後の月の日付も含めた範囲を設定
-        LocalDateTime startOfCalendar = startOfMonth.minusDays(startOfMonth.getDayOfWeek().getValue() % 7);
-        LocalDateTime endOfCalendar = endOfMonth.plusDays(6 - endOfMonth.getDayOfWeek().getValue());
-
-        List<Task> tasks;
-
-        if (userDetails.getAuthorities().stream().anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"))) {
-            tasks = taskService.findTasksByDateBetween(startOfCalendar, endOfCalendar);
-        } else {
-            tasks = taskService.findTasksByDateBetween(startOfCalendar, endOfCalendar, userDetails.getUsername());
-        }
-
-        // 日付でタスクをマッピングする
-        Map<LocalDate, List<Task>> tasksByDate = tasks.stream()
-            .collect(Collectors.groupingBy(task -> task.getDate().toLocalDate()));
-
-        model.addAttribute("tasks", tasksByDate);
-        model.addAttribute("month", targetDate.format(YEAR_MONTH_FORMATTER));
-        model.addAttribute("prev", targetDate.minusMonths(1));
-        model.addAttribute("next", targetDate.plusMonths(1));
-        model.addAttribute("matrix", createCalendarMatrix(startOfMonth.toLocalDate()));
-
+        List<List<LocalDate>> matrix = createCalendarMatrix(targetDate, model, userDetails);
+        model.addAttribute("matrix", matrix);
         return "main";
     }
+
+    private List<List<LocalDate>> createCalendarMatrix(LocalDate startOfMonth, Model model, UserDetails userDetails) {
+        List<List<LocalDate>> calendarMatrix = new ArrayList<>();
+        List<LocalDate> week = new ArrayList<>();
+
+        LocalDate date = startOfMonth;
+        int daysToSubtract = date.getDayOfWeek().getValue() % 7;  // 月の始まりの日付を週の始まり（日曜日）に合わせるために必要な日数
+        LocalDate start = date.minusDays(daysToSubtract);  // カレンダー表示の最初の日
+
+        // カレンダー表示の最後の日を計算
+        int daysInMonth = startOfMonth.lengthOfMonth();  // その月の日数
+        int totalDays = daysToSubtract + daysInMonth;  // 開始前に追加される日数とその月の日数を合計
+        int numWeeks = (int) Math.ceil(totalDays / 7.0);  // 表示する週の数
+
+        LocalDate end = start.plusDays(numWeeks * 7 - 1);  // 表示する最後の日（日曜日開始でnumWeeks週間後）
+
+        // タスクの取得
+        List<Task> tasks;
+        if (userDetails.getAuthorities().stream().anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"))) {
+            tasks = taskService.findTasksByDateBetween(start.atStartOfDay(), end.atTime(LocalTime.MAX));
+        } else {
+            tasks = taskService.findTasksByDateBetween(start.atStartOfDay(), end.atTime(LocalTime.MAX), userDetails.getUsername());
+        }
+        Map<LocalDate, List<Task>> tasksByDate = tasks.stream()
+            .collect(Collectors.groupingBy(task -> task.getDate().toLocalDate()));
+        model.addAttribute("tasks", tasksByDate);
+
+        // カレンダー行を生成
+        for (int i = 0; i < numWeeks * 7; i++) {  // numWeeks週間分の日付を生成
+            week.add(start.plusDays(i));
+            if (week.size() == 7) {
+                calendarMatrix.add(new ArrayList<>(week));
+                week.clear();
+            }
+        }
+
+        // 表示用に月と年をモデルに追加
+        model.addAttribute("month", startOfMonth.format(YEAR_MONTH_FORMATTER));
+        model.addAttribute("prev", startOfMonth.minusMonths(1));
+        model.addAttribute("next", startOfMonth.plusMonths(1));
+        
+        return calendarMatrix;
+    }
+
 
     @GetMapping("/main")
     public String redirectToHome(@RequestParam(required = false) String date) {
@@ -132,31 +152,5 @@ public class TaskController {
     public String deleteTask(@PathVariable int id, @AuthenticationPrincipal UserDetails userDetails) {
         taskService.deleteTask(id);
         return "redirect:/home";
-    }
-
-    private List<List<LocalDate>> createCalendarMatrix(LocalDate startOfMonth) {
-        List<List<LocalDate>> calendarMatrix = new ArrayList<>();
-        List<LocalDate> week = new ArrayList<>();
-
-        LocalDate date = startOfMonth;
-        int daysToSubtract = date.getDayOfWeek().getValue() % 7;
-        LocalDate start = date.minusDays(daysToSubtract);
-
-        // Calculate the number of weeks in the month
-        int daysInMonth = startOfMonth.lengthOfMonth();
-        int totalDays = daysToSubtract + daysInMonth;
-        int numWeeks = (int) Math.ceil(totalDays / 7.0);
-
-        for (int i = 0; i < numWeeks * 7; i++) {
-            week.add(start);
-            start = start.plusDays(1);
-
-            if (week.size() == 7) {
-                calendarMatrix.add(new ArrayList<>(week));
-                week.clear();
-            }
-        }
-
-        return calendarMatrix;
     }
 }
